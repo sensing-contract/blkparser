@@ -6,6 +6,7 @@ import (
 	"satoblock/store"
 	"satoblock/task/parallel"
 	"satoblock/task/serial"
+	"sync"
 )
 
 // ParseBlockParallel 先并行分析区块，不同区块并行，同区块内串行
@@ -52,21 +53,34 @@ func ParseBlockParallelEnd(block *model.Block) {
 func ParseEnd(isFull bool) {
 	defer logger.SyncLog()
 
-	// 批量更新redis utxo
-	serial.UpdateUtxoInRedis(serial.GlobalNewUtxoDataMap, serial.GlobalSpentUtxoDataMap, false)
+	var wg sync.WaitGroup
 
-	// 清空本地map内存
-	serial.CleanUtxoMap()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// 批量更新redis utxo
+		serial.UpdateUtxoInRedis(serial.GlobalNewUtxoDataMap, serial.GlobalSpentUtxoDataMap, false)
 
-	// 提交DB
-	store.CommitSyncCk()
-	store.CommitFullSyncCk(serial.SyncTxFullCount > 0)
-	store.CommitCodeHashSyncCk(serial.SyncTxCodeHashCount > 0)
+		// 清空本地map内存
+		serial.CleanUtxoMap()
+	}()
 
-	// 执行DB数据额外更新
-	if isFull {
-		store.ProcessAllSyncCk()
-	} else {
-		store.ProcessPartSyncCk()
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		// 提交DB
+		store.CommitSyncCk()
+		store.CommitFullSyncCk(serial.SyncTxFullCount > 0)
+		store.CommitCodeHashSyncCk(serial.SyncTxCodeHashCount > 0)
+
+		// 执行DB数据额外更新
+		if isFull {
+			store.ProcessAllSyncCk()
+		} else {
+			store.ProcessPartSyncCk()
+		}
+	}()
+
+	wg.Wait()
 }
