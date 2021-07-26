@@ -50,8 +50,14 @@ func PublishBlockSyncFinished() {
 
 func FlushdbInRedis() {
 	logger.Log.Info("FlushdbInRedis start")
-	rdbc.FlushDB(ctx)
-	logger.Log.Info("FlushdbInRedis finish")
+	err := rdbc.ForEachMaster(ctx, func(ctx context.Context, master *redis.Client) error {
+		return master.FlushDB(ctx).Err()
+	})
+	if err != nil {
+		logger.Log.Info("FlushdbInRedis err", zap.Error(err))
+	} else {
+		logger.Log.Info("FlushdbInRedis finish")
+	}
 }
 
 // ParseGetSpentUtxoDataFromRedisSerial 同步从redis中查询所需utxo信息来使用
