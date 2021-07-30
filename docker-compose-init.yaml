@@ -2,8 +2,8 @@ version: '3'
 services:
    satoblock:
      build: .
-     entrypoint: /data/cmd/init.sh
      image: satoblock:rdbc-v8
+     entrypoint: ./satoblock -full -end 100000
      volumes:
        - /data/bitcoin-sv-blocks/blocks:/data/bitcoin-sv-blocks/blocks:ro
        - ./conf:/data/conf:ro
