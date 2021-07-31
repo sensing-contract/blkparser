@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	rdbc *redis.ClusterClient
-	ctx  = context.Background()
+	rdb *redis.ClusterClient
+	ctx = context.Background()
 )
 
 func init() {
@@ -34,7 +34,7 @@ func init() {
 	readTimeout := viper.GetDuration("readTimeout")
 	writeTimeout := viper.GetDuration("writeTimeout")
 	poolSize := viper.GetInt("poolSize")
-	rdbc = redis.NewClusterClient(&redis.ClusterOptions{
+	rdb = redis.NewClusterClient(&redis.ClusterOptions{
 		Addrs:        clusterAddrs,
 		Password:     password,
 		DialTimeout:  dialTimeout,
@@ -45,12 +45,12 @@ func init() {
 }
 
 func PublishBlockSyncFinished() {
-	rdbc.Publish(ctx, "channel_block_sync", "finished")
+	rdb.Publish(ctx, "channel_block_sync", "finished")
 }
 
 func FlushdbInRedis() {
 	logger.Log.Info("FlushdbInRedis start")
-	err := rdbc.ForEachMaster(ctx, func(ctx context.Context, master *redis.Client) error {
+	err := rdb.ForEachMaster(ctx, func(ctx context.Context, master *redis.Client) error {
 		return master.FlushDB(ctx).Err()
 	})
 	if err != nil {
@@ -64,7 +64,7 @@ func FlushdbInRedis() {
 // 部分utxo信息在程序内存，missing的utxo将从redis查询
 // 区块同步结束时会批量更新缓存的utxo到redis
 func ParseGetSpentUtxoDataFromRedisSerial(block *model.ProcessBlock) {
-	pipe := rdbc.Pipeline()
+	pipe := rdb.Pipeline()
 	m := map[string]*redis.StringCmd{}
 	needExec := false
 	for key := range block.SpentUtxoKeysMap {
@@ -146,7 +146,7 @@ func UpdateUtxoInRedis(utxoToRestore, utxoToRemove map[string]*model.TxoData, is
 	if len(utxoToRestore) == 0 && len(utxoToRemove) == 0 {
 		return
 	}
-	pipe := rdbc.Pipeline()
+	pipe := rdb.Pipeline()
 	for key, data := range utxoToRestore {
 		buf := make([]byte, 20+len(data.Script))
 		data.Marshal(buf)
@@ -370,7 +370,7 @@ func UpdateUtxoInRedis(utxoToRestore, utxoToRemove map[string]*model.TxoData, is
 	}
 
 	// 需要单线程处理
-	pipe = rdbc.Pipeline()
+	pipe = rdb.Pipeline()
 	// 删除balance 为0的记录
 	for keyString, cmd := range addressBalanceCmds {
 		balance, err := cmd.Result()
