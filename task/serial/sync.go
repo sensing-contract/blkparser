@@ -73,6 +73,12 @@ func SyncBlock(block *model.Block) {
 // SyncBlockTx all tx in block height
 func SyncBlockTx(block *model.Block) {
 	for txIdx, tx := range block.Txs {
+		// keep sensible rawtx only
+		// prune txraw
+		txraw := ""
+		if tx.IsSensible {
+			txraw = string(tx.Raw)
+		}
 		if _, err := store.SyncStmtTx.Exec(
 			string(tx.Hash),
 			tx.TxInCnt,
@@ -81,7 +87,7 @@ func SyncBlockTx(block *model.Block) {
 			tx.LockTime,
 			tx.InputsValue,
 			tx.OutputsValue,
-			string(tx.Raw),
+			txraw, // string(tx.Raw)
 			uint32(block.Height),
 			string(block.Hash),
 			uint64(txIdx),
@@ -100,6 +106,15 @@ func SyncBlockTxOutputInfo(block *model.Block) {
 		for vout, output := range tx.TxOuts {
 			tx.OutputsValue += output.Satoshi
 
+			// prune string(output.Pkscript),
+			pkscript := ""
+
+			// set sensible flag
+			if output.CodeType != scriptDecoder.CodeType_NONE {
+				tx.IsSensible = true
+				pkscript = string(output.Pkscript)
+			}
+
 			var dataValue uint64
 			if output.CodeType == scriptDecoder.CodeType_NFT {
 				dataValue = output.TokenIndex
@@ -116,7 +131,7 @@ func SyncBlockTxOutputInfo(block *model.Block) {
 				dataValue,
 				output.Satoshi,
 				string(output.LockingScriptType),
-				string(output.Pkscript),
+				pkscript,
 				uint32(block.Height),
 				uint64(txIdx),
 			); err != nil {
@@ -162,6 +177,15 @@ func SyncBlockTxInputDetail(block *model.Block) {
 			}
 			tx.InputsValue += objData.Satoshi
 
+			script := ""
+			// set sensible flag
+			if objData.CodeType != scriptDecoder.CodeType_NONE {
+				tx.IsSensible = true
+			}
+			if len(objData.AddressPkh) == 20 {
+				script = string(objData.Script)
+			}
+
 			var dataValue uint64
 			// token summary
 			if len(objData.CodeHash) == 20 && len(objData.GenesisId) >= 20 {
@@ -196,7 +220,7 @@ func SyncBlockTxInputDetail(block *model.Block) {
 				uint64(txIdx),
 				string(tx.Hash),
 				uint32(vin),
-				string(input.ScriptSig),
+				"", // prune string(input.ScriptSig),
 				uint32(input.Sequence),
 
 				uint32(objData.BlockHeight),
@@ -210,7 +234,7 @@ func SyncBlockTxInputDetail(block *model.Block) {
 				dataValue,
 				objData.Satoshi,
 				string(objData.ScriptType),
-				string(objData.Script),
+				script,
 			); err != nil {
 				logger.Log.Info("sync-txin-full-err",
 					zap.String("sync", "txin full err"),
